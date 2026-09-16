@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Priority — AI Daily Health Coach for Students</title>
+  <meta name="description" content="AI-assisted daily health coach for college students. Answers one question: What is the most important health action I should take today?">
+  <meta name="theme-color" content="#2D5A43">
+
+  <!-- Google Fonts: Outfit (Display/Headings) & Inter (Body/UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>">
+</head>
+<body>
+  <!-- Ambient background glow filters -->
+  <div class="ambient-glow-1"></div>
+  <div class="ambient-glow-2"></div>
+
+  <!-- Sticky Top Header & Controls -->
+  <header class="app-top-bar">
+    <div class="brand-section">
+      <div class="brand-logo-icon">P</div>
+      <div class="brand-info">
+        <h1>
+          Priority
+          <span class="badge-pill">Daily Coach</span>
+        </h1>
+        <p>One essential action for today's health</p>
+      </div>
+    </div>
+
+    <div class="top-bar-actions">
+      <!-- Persona Switcher -->
+      <div class="persona-selector" id="persona-selector-btn" title="Switch Student Persona">
+        <span class="persona-avatar" id="persona-avatar">👩🏽‍🔬</span>
+        <div class="persona-details">
+          <span class="persona-name" id="persona-name">Priya Patel</span>
+          <span class="persona-badge" id="persona-badge">Pre-Med Archetype</span>
+        </div>
+        <span style="font-size: 11px; color: var(--text-muted); margin-left: 2px;">▼</span>
+      </div>
+
+      <!-- View Layout Toggle: Phone Preview vs. Desktop Dashboard -->
+      <div class="view-mode-group">
+        <button class="btn-icon-toggle active" id="view-phone-btn" title="Mobile App View">
+          <span>📱</span>
+          <span class="view-label">Mobile</span>
+        </button>
+        <button class="btn-icon-toggle" id="view-dashboard-btn" title="Dashboard View">
+          <span>💻</span>
+          <span class="view-label">Dashboard</span>
+        </button>
+      </div>
+
+      <!-- Dark / Light Mode Toggle -->
+      <button class="btn-icon-circle" id="theme-toggle-btn" title="Toggle Dark/Light Mode">
+        🌙
+      </button>
+    </div>
+  </header>
+
+  <!-- Main View Container (Switches between Mobile Frame and Responsive Dashboard) -->
+  <main class="app-container" id="main-dynamic-container">
+    <!-- Rendered dynamically by app.js -->
+  </main>
+
+  <!-- Persona Selection Modal -->
+  <div class="modal-overlay" id="persona-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Select Student Persona</h3>
+        <button class="btn-close-modal">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 18px;">
+        Test how Priority's scoring and safety engines tailor advice across different student lifestyles:
+      </p>
+
+      <!-- Persona 1: Priya -->
+      <div class="action-item" data-persona-select="priya" style="padding: 14px; margin-bottom: 12px; cursor: pointer;">
+        <span style="font-size: 28px; margin-right: 4px;">👩🏽‍🔬</span>
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <strong style="font-size: 15px;">Priya — Overloaded Pre-Med</strong>
+            <span class="badge-pill">High Sleep Debt</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            Organic chem, 4-5h sleep, skips meals, coffee spikes. Needs permission to rest.
+          </p>
+        </div>
+      </div>
+
+      <!-- Persona 2: Marcus -->
+      <div class="action-item" data-persona-select="marcus" style="padding: 14px; margin-bottom: 12px; cursor: pointer;">
+        <span style="font-size: 28px; margin-right: 4px;">🎧</span>
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <strong style="font-size: 15px;">Marcus — Social Night Owl</strong>
+            <span class="badge-pill" style="background: rgba(69,123,157,0.15); color: #457B9D;">Erratic Bedtimes</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            Late restaurant shifts, 3 AM gaming, irregular meal times, dehydrated.
+          </p>
+        </div>
+      </div>
+
+      <!-- Persona 3: Custom Student -->
+      <div class="action-item" data-persona-select="custom" style="padding: 14px; cursor: pointer;">
+        <span style="font-size: 28px; margin-right: 4px;">🎓</span>
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <strong style="font-size: 15px;">Alex Rivera — Custom Student</strong>
+            <span class="badge-pill" style="background: rgba(82,183,136,0.15); color: #2D5A43;">Fresh Check-in</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+            Balanced baseline, ready for you to input your own custom check-in.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Safety & Crisis Resources Modal -->
+  <div class="modal-overlay" id="support-resources-modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: var(--danger); display: flex; align-items: center; gap: 8px;">
+          <span>🛡️</span> Immediate Support Resources
+        </h3>
+        <button class="btn-close-modal">&times;</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">
+        College can be intensely stressful. If you or someone you know is struggling or in crisis, free and confidential help is always available:
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+        <div style="background: var(--bg-card-subtle); padding: 12px 14px; border-radius: var(--radius-md); border-left: 4px solid var(--danger);">
+          <strong style="font-size: 14px;">988 Suicide & Crisis Lifeline</strong>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 6px;">Call or text 988. Free, confidential, available 24/7 in English and Spanish.</p>
+          <a href="tel:988" class="btn-emergency" style="font-size: 11px; padding: 4px 10px;">Call or Text 988</a>
+        </div>
+
+        <div style="background: var(--bg-card-subtle); padding: 12px 14px; border-radius: var(--radius-md); border-left: 4px solid #38A3A5;">
+          <strong style="font-size: 14px;">Crisis Text Line</strong>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 6px;">Text HOME to 741741 to connect with a crisis counselor 24/7.</p>
+          <a href="sms:741741" class="btn-emergency" style="background: #38A3A5; font-size: 11px; padding: 4px 10px;">Text HOME to 741741</a>
+        </div>
+
+        <div style="background: var(--bg-card-subtle); padding: 12px 14px; border-radius: var(--radius-md); border-left: 4px solid var(--primary);">
+          <strong style="font-size: 14px;">Campus Student Counseling</strong>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 6px;">Most colleges provide confidential on-campus or telehealth mental health sessions covered by student fees.</p>
+        </div>
+      </div>
+
+      <button class="btn-primary-action btn-close-modal" style="width: 100%; padding: 10px;">
+        Close Resources
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

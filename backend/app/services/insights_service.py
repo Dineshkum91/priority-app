@@ -65,6 +65,8 @@ def compute_weekly_insight(
     avg_meals = _safe_avg([c.meals_eaten for c in checkins])
     avg_energy = _safe_avg([c.energy_level for c in checkins])
     avg_mood = _safe_avg([c.mood for c in checkins])
+    avg_screen_time = _safe_avg([c.screen_time_hours for c in checkins])
+    avg_caffeine = _safe_avg([c.caffeine_cups for c in checkins])
 
     # Detect simple patterns (only claim what data supports)
     patterns = _detect_patterns(checkins)
@@ -87,6 +89,8 @@ def compute_weekly_insight(
         existing.avg_meals_eaten = avg_meals
         existing.avg_energy_level = avg_energy
         existing.avg_mood = avg_mood
+        existing.avg_screen_time_hours = avg_screen_time
+        existing.avg_caffeine_cups = avg_caffeine
         existing.patterns = json.dumps(patterns) if patterns else None
         existing.days_with_data = days_with_data
         insight = existing
@@ -102,6 +106,8 @@ def compute_weekly_insight(
             avg_meals_eaten=avg_meals,
             avg_energy_level=avg_energy,
             avg_mood=avg_mood,
+            avg_screen_time_hours=avg_screen_time,
+            avg_caffeine_cups=avg_caffeine,
             patterns=json.dumps(patterns) if patterns else None,
             days_with_data=days_with_data,
         )
@@ -177,6 +183,24 @@ def _detect_patterns(checkins) -> List[str]:
         if skip_days >= 3:
             patterns.append(
                 "You ate 1 or fewer meals on several days this week"
+            )
+
+    # Screen time consistently high
+    screen_vals = [c.screen_time_hours for c in checkins if c.screen_time_hours is not None]
+    if len(screen_vals) >= 5:
+        high_screen_days = sum(1 for s in screen_vals if s > 8)
+        if high_screen_days >= 4:
+            patterns.append(
+                "Screen time exceeded 8 hours on 4+ days this week — late-night scrolling may be affecting sleep"
+            )
+
+    # Caffeine creeping up
+    caffeine_vals = [c.caffeine_cups for c in checkins if c.caffeine_cups is not None]
+    if len(caffeine_vals) >= 5:
+        high_caffeine_days = sum(1 for c in caffeine_vals if c >= 4)
+        if high_caffeine_days >= 3:
+            patterns.append(
+                "You had 4+ caffeinated drinks on several days — this can compound stress and disrupt sleep"
             )
 
     return patterns

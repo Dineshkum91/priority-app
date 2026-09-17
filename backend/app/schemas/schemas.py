@@ -16,6 +16,8 @@ class HealthDimensionEnum(str, Enum):
     STRESS = "stress"
     NUTRITION = "nutrition"
     RECOVERY = "recovery"
+    SCREEN_TIME = "screen_time"
+    CAFFEINE = "caffeine"
 
 
 class FeedbackResponseEnum(str, Enum):
@@ -49,6 +51,11 @@ class UserProfileCreate(BaseModel):
     typical_sleep_hours: Optional[float] = Field(None, ge=0, le=24)
     activity_level: Optional[str] = Field(None, pattern=r"^(sedentary|light|moderate|active)$")
     schedule_type: Optional[str] = Field(None, pattern=r"^(regular|irregular|night_owl)$")
+    goal_sleep_hours: Optional[float] = Field(None, ge=0, le=24)
+    goal_water_glasses: Optional[int] = Field(None, ge=0, le=20)
+    goal_activity_minutes: Optional[int] = Field(None, ge=0, le=600)
+    goal_max_screen_hours: Optional[float] = Field(None, ge=0, le=24)
+    goal_max_caffeine_cups: Optional[int] = Field(None, ge=0, le=20)
 
 
 class UserProfileUpdate(BaseModel):
@@ -57,6 +64,11 @@ class UserProfileUpdate(BaseModel):
     typical_sleep_hours: Optional[float] = Field(None, ge=0, le=24)
     activity_level: Optional[str] = Field(None, pattern=r"^(sedentary|light|moderate|active)$")
     schedule_type: Optional[str] = Field(None, pattern=r"^(regular|irregular|night_owl)$")
+    goal_sleep_hours: Optional[float] = Field(None, ge=0, le=24)
+    goal_water_glasses: Optional[int] = Field(None, ge=0, le=20)
+    goal_activity_minutes: Optional[int] = Field(None, ge=0, le=600)
+    goal_max_screen_hours: Optional[float] = Field(None, ge=0, le=24)
+    goal_max_caffeine_cups: Optional[int] = Field(None, ge=0, le=20)
 
 
 class UserProfileResponse(BaseModel):
@@ -68,6 +80,11 @@ class UserProfileResponse(BaseModel):
     typical_sleep_hours: Optional[float]
     activity_level: Optional[str]
     schedule_type: Optional[str]
+    goal_sleep_hours: Optional[float]
+    goal_water_glasses: Optional[int]
+    goal_activity_minutes: Optional[int]
+    goal_max_screen_hours: Optional[float]
+    goal_max_caffeine_cups: Optional[int]
     created_at: datetime
 
 
@@ -86,6 +103,8 @@ class DailyCheckInCreate(BaseModel):
     meal_quality: Optional[int] = Field(None, ge=1, le=5)
     energy_level: Optional[int] = Field(None, ge=1, le=5)
     mood: Optional[int] = Field(None, ge=1, le=5)
+    screen_time_hours: Optional[float] = Field(None, ge=0, le=24)
+    caffeine_cups: Optional[int] = Field(None, ge=0, le=20)
     notes: Optional[str] = None
 
 
@@ -104,6 +123,8 @@ class DailyCheckInResponse(BaseModel):
     meal_quality: Optional[int]
     energy_level: Optional[int]
     mood: Optional[int]
+    screen_time_hours: Optional[float]
+    caffeine_cups: Optional[int]
     notes: Optional[str]
     created_at: datetime
 
@@ -171,6 +192,8 @@ class HealthInsightResponse(BaseModel):
     avg_meals_eaten: Optional[float]
     avg_energy_level: Optional[float]
     avg_mood: Optional[float]
+    avg_screen_time_hours: Optional[float]
+    avg_caffeine_cups: Optional[float]
     patterns: Optional[str]
     days_with_data: int
     created_at: datetime
@@ -181,6 +204,49 @@ class WeeklyInsightsResponse(BaseModel):
     has_sufficient_data: bool  # True only if ≥7 days
     message: str  # "Not enough data yet" or summary
     insight: Optional[HealthInsightResponse] = None
+
+
+# ---------- Streaks, Trends & Goals ----------
+
+class StreakResponse(BaseModel):
+    """Check-in streak and days-goals-met streak."""
+    current_checkin_streak: int
+    longest_checkin_streak: int
+    goals_met_streak: int
+    message: str
+
+
+class DimensionTrend(BaseModel):
+    dimension: HealthDimensionEnum
+    this_week_avg: Optional[float]
+    last_week_avg: Optional[float]
+    direction: str  # 'improving' | 'declining' | 'stable' | 'no_data'
+
+
+class TrendsResponse(BaseModel):
+    week_start: date
+    week_end: date
+    trends: List[DimensionTrend]
+
+
+class GoalUpdateRequest(BaseModel):
+    """Partial update of custom daily goals."""
+    goal_sleep_hours: Optional[float] = Field(None, ge=0, le=24)
+    goal_water_glasses: Optional[int] = Field(None, ge=0, le=20)
+    goal_activity_minutes: Optional[int] = Field(None, ge=0, le=600)
+    goal_max_screen_hours: Optional[float] = Field(None, ge=0, le=24)
+    goal_max_caffeine_cups: Optional[int] = Field(None, ge=0, le=20)
+
+
+class GoalUpdateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    user_id: UUID
+    goal_sleep_hours: Optional[float]
+    goal_water_glasses: Optional[int]
+    goal_activity_minutes: Optional[int]
+    goal_max_screen_hours: Optional[float]
+    goal_max_caffeine_cups: Optional[int]
 
 
 # ---------- Safety ----------

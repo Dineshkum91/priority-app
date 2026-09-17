@@ -95,8 +95,104 @@ const DIM_META = {
   [HealthDimension.HYDRATION]: { label: 'Hydration', icon: '💧', color: '#457B9D' },
   [HealthDimension.NUTRITION]: { label: 'Nutrition & Fuel', icon: '🥗', color: '#E9C46A' },
   [HealthDimension.ACTIVITY]: { label: 'Movement & Posture', icon: '⚡', color: '#38A3A5' },
-  [HealthDimension.RECOVERY]: { label: 'Rest & Recharge', icon: '🌿', color: '#52796F' }
+  [HealthDimension.RECOVERY]: { label: 'Rest & Recharge', icon: '🌿', color: '#52796F' },
+  [HealthDimension.SCREEN_TIME]: { label: 'Screen Time', icon: '📱', color: '#8E7CC3' },
+  [HealthDimension.CAFFEINE]: { label: 'Caffeine Intake', icon: '☕', color: '#A9714B' }
 };
+
+// Custom goals (persisted per persona in localStorage)
+const GOALS_KEY = 'priority_custom_goals';
+
+function loadGoals() {
+  try {
+    const all = JSON.parse(localStorage.getItem(GOALS_KEY) || '{}');
+    return all[STATE.currentPersona] || { goal_sleep_hours: null, goal_water_glasses: null, goal_activity_minutes: null, goal_max_screen_hours: null, goal_max_caffeine_cups: null };
+  } catch {
+    return { goal_sleep_hours: null, goal_water_glasses: null, goal_activity_minutes: null, goal_max_screen_hours: null, goal_max_caffeine_cups: null };
+  }
+}
+
+function saveGoals(goals) {
+  try {
+    const all = JSON.parse(localStorage.getItem(GOALS_KEY) || '{}');
+    all[STATE.currentPersona] = goals;
+    localStorage.setItem(GOALS_KEY, JSON.stringify(all));
+  } catch { /* storage unavailable */ }
+}
+
+// Streak calculation from history (consecutive days ending today/yesterday)
+function computeStreak() {
+  // History entries are Day -6..-1, each represents a consecutive prior day,
+  // so a full 6-day history = a 7-day streak including today's check-in.
+  return STATE.history.length + 1; // +1 for today
+}
+
+// Week-over-week trend arrows per dimension
+function computeTrends() {
+  const history = STATE.history; // oldest..newest (Day -6..-1)
+  const half = Math.floor(history.length / 2);
+  const older = history.slice(0, half);
+  const newer = history.slice(half);
+
+  const avg = (arr, key) => {
+    const vals = arr.map(h => h[key]).filter(v => v !== undefined && v !== null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+
+  const defs = [
+    { key: 'sleep_hours', label: 'Sleep', unit: 'h', lowerIsBetter: true },
+    { key: 'stress_level', label: 'Stress', unit: '/5', lowerIsBetter: true },
+    { key: 'screen_time_hours', label: 'Screen', unit: 'h', lowerIsBetter: true },
+    { key: 'caffeine_cups', label: 'Caffeine', unit: ' cups', lowerIsBetter: true },
+    { key: 'water_glasses', label: 'Water', unit: ' gls', lowerIsBetter: false },
+    { key: 'activity_minutes', label: 'Activity', unit: ' min', lowerIsBetter: false }
+  ];
+
+  return defs.map(def => {
+    const prev = avg(older, def.key);
+    const cur = avg(newer, def.key);
+    let dir = 'no_data';
+    if (cur !== null && prev !== null) {
+      const changed = cur - prev;
+      const tolerance = Math.abs(prev) * 0.1 || 0.1;
+      if (Math.abs(changed) <= tolerance) dir = 'stable';
+      else if (def.lowerIsBetter) dir = changed < 0 ? 'improving' : 'declining';
+      else dir = changed > 0 ? 'improving' : 'declining';
+    }
+    return { ...def, cur, prev, dir };
+  });
+}
+
+const TREND_ARROW = { improving: '📈', declining: '📉', stable: '➡️', no_data: '➖' };
+const TREND_LABEL = { improving: 'Improving', declining: 'Declining', stable: 'Stable', no_data: 'No data' };
+
+// CSV export of all check-in history + today
+function exportCSV() {
+  const rows = [[
+    'date', 'sleep_hours', 'stress_level', 'meals_eaten', 'water_glasses',
+    'activity_minutes', 'screen_time_hours', 'caffeine_cups', 'notes'
+  ]];
+  for (const h of STATE.history) {
+    rows.push([h.date, h.sleep_hours ?? '', h.stress_level ?? '', h.meals_eaten ?? '',
+      h.water_glasses ?? '', h.activity_minutes ?? '', h.screen_time_hours ?? '',
+      h.caffeine_cups ?? '', (h.notes || '').replace(/[\",\n]/g, ' ')]);
+  }
+  const t = STATE.todayCheckin;
+  rows.push(['Today', t.sleep_hours ?? '', t.stress_level ?? '', t.meals_eaten ?? '',
+    t.water_glasses ?? '', t.activity_minutes ?? '', t.screen_time_hours ?? '',
+    t.caffeine_cups ?? '', (t.notes || '').replace(/[\",\n]/g, ' ')]);
+
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `priority_checkins_${STATE.currentPersona}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 // Initialize Application
 function initApp() {
@@ -391,6 +487,9 @@ function renderTodayScreen() {
         <div class="metric-label">Glasses Water</div>
       </div>
     </div>
+
+    <!-- Streak strip -->
+    ${renderStreakStrip()}
   `;
 }
 
@@ -484,6 +583,36 @@ function renderCheckinScreen() {
       </div>
     </div>
 
+    <!-- Screen Time Slider -->
+    <div class="slider-field">
+      <div class="slider-header">
+        <span class="slider-label">📱 Screen time today?</span>
+        <span class="slider-val-badge" id="lbl-screen">${current.screen_time_hours ?? 6} hrs</span>
+      </div>
+      <input type="range" class="range-input" id="input-screen" min="0" max="16" step="0.5" value="${current.screen_time_hours ?? 6}">
+      <div class="slider-ticks">
+        <span>0</span>
+        <span>6 (Target max)</span>
+        <span>12</span>
+        <span>16</span>
+      </div>
+    </div>
+
+    <!-- Caffeine Slider -->
+    <div class="slider-field">
+      <div class="slider-header">
+        <span class="slider-label">☕ Caffeinated drinks today?</span>
+        <span class="slider-val-badge" id="lbl-caffeine">${current.caffeine_cups ?? 2} cups</span>
+      </div>
+      <input type="range" class="range-input" id="input-caffeine" min="0" max="8" step="1" value="${current.caffeine_cups ?? 2}">
+      <div class="slider-ticks">
+        <span>0</span>
+        <span>2</span>
+        <span>3 (Limit)</span>
+        <span>8</span>
+      </div>
+    </div>
+
     <!-- Optional Notes (Triggers safety scanner) -->
     <div class="slider-field notes-field">
       <div class="slider-header">
@@ -513,6 +642,8 @@ function renderInsightsScreen() {
   const avgSleep = (totalSleep / history.length).toFixed(1);
   const avgStress = (history.reduce((sum, h) => sum + (h.stress_level || 0), 0) / history.length).toFixed(1);
   const sleepDebt = Math.max(0, ((STATE.profile.typical_sleep_hours * history.length) - totalSleep)).toFixed(1);
+  const trends = computeTrends();
+  const goals = loadGoals();
 
   return `
     <div class="card-header" style="margin-bottom: 8px;">
@@ -560,6 +691,74 @@ function renderInsightsScreen() {
       <span class="pattern-icon">💡</span>
       <div class="pattern-text">
         <strong>Key Pattern Detected:</strong> On nights when sleep fell below 5.0 hours, reported stress jumped from 3/5 to 5/5 the following afternoon. Prioritising sleep tonight will stabilize your cognitive focus for tomorrow.
+      </div>
+    </div>
+
+    <!-- Week-over-week trend arrows -->
+    <div class="card" style="margin-top: 14px;">
+      <div class="card-title-group" style="margin-bottom: 12px;">
+        <span class="card-title-icon">🧭</span>
+        <h3 class="card-title">This Week vs Last Week</h3>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px;">
+        ${trends.map(t => `
+          <div class="metric-box" style="display: flex; align-items: center; gap: 8px; justify-content: flex-start; padding: 10px 12px;">
+            <span style="font-size: 20px;">${TREND_ARROW[t.dir]}</span>
+            <div>
+              <div style="font-size: 12px; font-weight: 600;">${t.label} ${t.cur !== null ? t.cur.toFixed(1) + t.unit : '—'}</div>
+              <div style="font-size: 10px; color: var(--text-muted);">${TREND_LABEL[t.dir]}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- Custom daily goals -->
+    <div class="card" style="margin-top: 14px;">
+      <div class="card-header" style="margin-bottom: 10px;">
+        <div class="card-title-group">
+          <span class="card-title-icon">🎯</span>
+          <h3 class="card-title">My Daily Goals</h3>
+        </div>
+        <button class="btn-icon-circle" id="btn-export-csv" title="Export all check-ins as CSV">⬇️ CSV</button>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Leave blank to use the app's recommended defaults.</p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;">
+        ${renderGoalInput('goal_sleep_hours', '🌙 Sleep (hrs)', goals.goal_sleep_hours, '0.5', '12', '7.5')}
+        ${renderGoalInput('goal_water_glasses', '💧 Water (glasses)', goals.goal_water_glasses, '1', '15', '8')}
+        ${renderGoalInput('goal_activity_minutes', '⚡ Activity (min)', goals.goal_activity_minutes, '5', '120', '30')}
+        ${renderGoalInput('goal_max_screen_hours', '📱 Max screen (hrs)', goals.goal_max_screen_hours, '0.5', '16', '6')}
+        ${renderGoalInput('goal_max_caffeine_cups', '☕ Max caffeine (cups)', goals.goal_max_caffeine_cups, '1', '8', '3')}
+      </div>
+      <button class="btn-primary-action" id="btn-save-goals" style="margin-top: 12px; width: 100%;">
+        <span>Save Goals</span><span>✓</span>
+      </button>
+    </div>
+  `;
+}
+
+// Single goal input row
+function renderGoalInput(key, label, value, step, max, placeholder) {
+  return `
+    <div>
+      <label style="font-size: 11px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 4px;">${label}</label>
+      <input type="number" class="goal-input" data-goal-key="${key}" value="${value ?? ''}"
+        step="${step}" min="0" max="${max}" placeholder="${placeholder}"
+        style="width: 100%; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-card-elevated); color: var(--text-primary); font-size: 13px;">
+    </div>
+  `;
+}
+
+// Streak strip under Today's stats
+function renderStreakStrip() {
+  const streak = computeStreak();
+  const flame = streak >= 7 ? '🔥' : streak >= 3 ? '✨' : '🌱';
+  return `
+    <div class="card" style="margin-top: 14px; display: flex; align-items: center; gap: 12px; padding: 14px 16px;">
+      <span style="font-size: 28px;">${flame}</span>
+      <div style="flex: 1;">
+        <div style="font-weight: 700; font-size: 15px;">${streak}-day check-in streak</div>
+        <div style="font-size: 12px; color: var(--text-muted);">${streak >= 7 ? 'Amazing consistency — keep the chain going!' : streak >= 3 ? 'Great rhythm forming. Don\'t break the chain!' : 'Check in daily to build your streak.'}</div>
       </div>
     </div>
   `;
@@ -819,6 +1018,8 @@ function attachInteractiveWidgetEvents() {
   const sleepInput = document.getElementById('input-sleep');
   const mealsInput = document.getElementById('input-meals');
   const waterInput = document.getElementById('input-water');
+  const screenInput = document.getElementById('input-screen');
+  const caffeineInput = document.getElementById('input-caffeine');
   const notesInput = document.getElementById('input-notes');
 
   if (sleepInput) {
@@ -859,6 +1060,52 @@ function attachInteractiveWidgetEvents() {
       if (lbl) lbl.textContent = `${val} / 5`;
     });
   });
+
+  // Screen time slider
+  if (screenInput) {
+    screenInput.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      STATE.todayCheckin.screen_time_hours = val;
+      const lbl = document.getElementById('lbl-screen');
+      if (lbl) lbl.textContent = `${val.toFixed(1)} hrs`;
+    });
+  }
+
+  // Caffeine slider
+  if (caffeineInput) {
+    caffeineInput.addEventListener('input', e => {
+      const val = parseInt(e.target.value, 10);
+      STATE.todayCheckin.caffeine_cups = val;
+      const lbl = document.getElementById('lbl-caffeine');
+      if (lbl) lbl.textContent = `${val} cups`;
+    });
+  }
+
+  // Goals: save button
+  const saveGoalsBtn = document.getElementById('btn-save-goals');
+  if (saveGoalsBtn) {
+    saveGoalsBtn.addEventListener('click', () => {
+      const goals = {};
+      document.querySelectorAll('.goal-input').forEach(inp => {
+        const key = inp.getAttribute('data-goal-key');
+        const raw = inp.value.trim();
+        goals[key] = raw === '' ? null : parseFloat(raw);
+      });
+      saveGoals(goals);
+      sfx.playSuccess();
+      showToast('🎯 Goals saved! They now shape your daily scoring.');
+      renderApp();
+    });
+  }
+
+  // CSV export button
+  const exportBtn = document.getElementById('btn-export-csv');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      exportCSV();
+      showToast('⬇️ Check-in history exported as CSV.');
+    });
+  }
 
   // Check-in Submit Button
   const submitBtn = document.getElementById('btn-submit-checkin');

@@ -13,6 +13,8 @@ export const HealthDimension = {
   HYDRATION: 'hydration',
   ACTIVITY: 'activity',
   RECOVERY: 'recovery',
+  SCREEN_TIME: 'screen_time',
+  CAFFEINE: 'caffeine',
 };
 
 export const ACTION_TEMPLATES = {
@@ -45,6 +47,16 @@ export const ACTION_TEMPLATES = {
     "Carve out 20 minutes for something genuinely restorative — not passive scrolling.",
     "Give yourself permission to decline one non-essential social commitment today.",
     "Wind down 30 minutes earlier tonight with calm music or reading."
+  ],
+  [HealthDimension.SCREEN_TIME]: [
+    "Set your phone to grayscale mode for the rest of the day — it makes scrolling far less compelling.",
+    "Pick one app that eats the most time and log out of it until tomorrow morning.",
+    "Charge your phone outside the bedroom tonight and read a few pages of a book instead."
+  ],
+  [HealthDimension.CAFFEINE]: [
+    "Make your next drink water or decaf — keep total caffeine today within your limit.",
+    "No caffeine after 2 PM today so it doesn't interfere with tonight's sleep.",
+    "Swap one coffee for a 10-minute walk — the alertness boost lasts longer."
   ]
 };
 
@@ -225,6 +237,21 @@ export function computeUrgency(dim, current, baseline) {
       if (baseline && current < baseline * 0.7) return 3.0;
       return 1.0;
 
+    case HealthDimension.SCREEN_TIME:
+      // Higher = worse (inverted dimension)
+      if (current > 12.0) return 6.0;
+      if (current > 9.0) return 4.5;
+      if (baseline && current > baseline * 1.4) return 3.5;
+      if (baseline && current > baseline * 1.2) return 2.0;
+      return 1.0;
+
+    case HealthDimension.CAFFEINE:
+      // Higher = worse (inverted dimension)
+      if (current >= 6) return 5.0;
+      if (current >= 4) return 3.5;
+      if (baseline && current > baseline * 1.5) return 2.5;
+      return 1.0;
+
     default:
       return 1.0;
   }
@@ -259,17 +286,21 @@ export function determinePriority(currentCheckin, profile, recentCheckins = [], 
     [HealthDimension.HYDRATION]: 6.0,
     [HealthDimension.NUTRITION]: 3.0,
     [HealthDimension.ACTIVITY]: 30.0,
-    [HealthDimension.RECOVERY]: 3.5
+    [HealthDimension.RECOVERY]: 3.5,
+    [HealthDimension.SCREEN_TIME]: profile?.goal_max_screen_hours || 6.0,
+    [HealthDimension.CAFFEINE]: profile?.goal_max_caffeine_cups || 3.0
   };
 
-  // Values from checkin
+  // Values from checkin (null-safe for optional new fields)
   const values = {
     [HealthDimension.SLEEP]: currentCheckin.sleep_hours,
     [HealthDimension.STRESS]: currentCheckin.stress_level,
     [HealthDimension.HYDRATION]: currentCheckin.water_glasses,
     [HealthDimension.NUTRITION]: currentCheckin.meals_eaten,
     [HealthDimension.ACTIVITY]: currentCheckin.activity_minutes ?? (currentCheckin.stress_level >= 4 ? 10 : 30),
-    [HealthDimension.RECOVERY]: ((currentCheckin.energy_level || 3) + (currentCheckin.mood || 3)) / 2.0
+    [HealthDimension.RECOVERY]: ((currentCheckin.energy_level || 3) + (currentCheckin.mood || 3)) / 2.0,
+    [HealthDimension.SCREEN_TIME]: currentCheckin.screen_time_hours ?? null,
+    [HealthDimension.CAFFEINE]: currentCheckin.caffeine_cups ?? null
   };
 
   // Compute urgency for each dimension
@@ -318,6 +349,12 @@ export function determinePriority(currentCheckin, profile, recentCheckins = [], 
       case HealthDimension.RECOVERY:
         explanation = `Your system is asking for intentional decompression. Taking 20 minutes to truly unplug will make your study time dramatically more efficient later.`;
         break;
+      case HealthDimension.SCREEN_TIME:
+        explanation = `You've logged ${curVal} hours of screen time today, past your ${bVal}-hour limit. Late-night scrolling delays sleep onset and fragments deep sleep — a hard screen curfew tonight is your highest-leverage fix.`;
+        break;
+      case HealthDimension.CAFFEINE:
+        explanation = `You've had ${curVal} caffeinated drinks today, over your ${bVal}-cup limit. Excess caffeine lingers 6+ hours in your system, quietly inflating stress and stealing sleep — cutting back now pays off tonight.`;
+        break;
     }
   }
 
@@ -361,12 +398,12 @@ export function getPresetStudent(type) {
         bio: "Organic chemistry labs, MCAT prep, hospital volunteering. Struggles with chronic sleep debt and coffee overconsumption."
       },
       history: [
-        { date: "Day -6", sleep_hours: 5.5, stress_level: 4, meals_eaten: 2, water_glasses: 3, activity_minutes: 15, notes: "O-chem quiz prep late night" },
-        { date: "Day -5", sleep_hours: 4.5, stress_level: 5, meals_eaten: 2, water_glasses: 2, activity_minutes: 10, notes: "Lab report due at midnight" },
-        { date: "Day -4", sleep_hours: 5.0, stress_level: 4, meals_eaten: 1, water_glasses: 4, activity_minutes: 20, notes: "Skipped breakfast again" },
-        { date: "Day -3", sleep_hours: 8.5, stress_level: 3, meals_eaten: 3, water_glasses: 5, activity_minutes: 25, notes: "Sunday catch-up crash" },
-        { date: "Day -2", sleep_hours: 5.0, stress_level: 4, meals_eaten: 2, water_glasses: 3, activity_minutes: 15, notes: "Monday 8 AM anatomy lecture" },
-        { date: "Day -1", sleep_hours: 4.0, stress_level: 5, meals_eaten: 2, water_glasses: 2, activity_minutes: 10, notes: "Only 4 hours sleep, chugged 3 coffees" }
+        { date: "Day -6", sleep_hours: 5.5, stress_level: 4, meals_eaten: 2, water_glasses: 3, activity_minutes: 15, screen_time_hours: 7.5, caffeine_cups: 3, notes: "O-chem quiz prep late night" },
+        { date: "Day -5", sleep_hours: 4.5, stress_level: 5, meals_eaten: 2, water_glasses: 2, activity_minutes: 10, screen_time_hours: 9.0, caffeine_cups: 4, notes: "Lab report due at midnight" },
+        { date: "Day -4", sleep_hours: 5.0, stress_level: 4, meals_eaten: 1, water_glasses: 4, activity_minutes: 20, screen_time_hours: 8.0, caffeine_cups: 3, notes: "Skipped breakfast again" },
+        { date: "Day -3", sleep_hours: 8.5, stress_level: 3, meals_eaten: 3, water_glasses: 5, activity_minutes: 25, screen_time_hours: 5.0, caffeine_cups: 1, notes: "Sunday catch-up crash" },
+        { date: "Day -2", sleep_hours: 5.0, stress_level: 4, meals_eaten: 2, water_glasses: 3, activity_minutes: 15, screen_time_hours: 8.5, caffeine_cups: 4, notes: "Monday 8 AM anatomy lecture" },
+        { date: "Day -1", sleep_hours: 4.0, stress_level: 5, meals_eaten: 2, water_glasses: 2, activity_minutes: 10, screen_time_hours: 10.0, caffeine_cups: 5, notes: "Only 4 hours sleep, chugged 3 coffees" }
       ],
       todayInitial: {
         sleep_hours: 4.5,
@@ -374,6 +411,8 @@ export function getPresetStudent(type) {
         meals_eaten: 2,
         water_glasses: 3,
         activity_minutes: 10,
+        screen_time_hours: 9.5,
+        caffeine_cups: 4,
         notes: "Exhausted, midterms coming up in 2 days"
       }
     };
@@ -390,12 +429,12 @@ export function getPresetStudent(type) {
         bio: "Late restaurant closing shifts, erratic meal schedule, social gaming until 3 AM, inconsistent hydration."
       },
       history: [
-        { date: "Day -6", sleep_hours: 6.0, stress_level: 2, meals_eaten: 2, water_glasses: 3, activity_minutes: 40, notes: "Pickup basketball at rec center" },
-        { date: "Day -5", sleep_hours: 5.5, stress_level: 3, meals_eaten: 1, water_glasses: 2, activity_minutes: 15, notes: "Late shift at pub until 1 AM" },
-        { date: "Day -4", sleep_hours: 6.5, stress_level: 3, meals_eaten: 2, water_glasses: 3, activity_minutes: 20, notes: "Ordered midnight pizza" },
-        { date: "Day -3", sleep_hours: 5.0, stress_level: 4, meals_eaten: 2, water_glasses: 2, activity_minutes: 10, notes: "Gaming with roommates till 3:30 AM" },
-        { date: "Day -2", sleep_hours: 6.0, stress_level: 3, meals_eaten: 2, water_glasses: 4, activity_minutes: 30, notes: "Job applications stressing me a bit" },
-        { date: "Day -1", sleep_hours: 5.2, stress_level: 4, meals_eaten: 1, water_glasses: 2, activity_minutes: 10, notes: "Missed dinner, drank energy drink" }
+        { date: "Day -6", sleep_hours: 6.0, stress_level: 2, meals_eaten: 2, water_glasses: 3, activity_minutes: 40, screen_time_hours: 6.0, caffeine_cups: 2, notes: "Pickup basketball at rec center" },
+        { date: "Day -5", sleep_hours: 5.5, stress_level: 3, meals_eaten: 1, water_glasses: 2, activity_minutes: 15, screen_time_hours: 7.0, caffeine_cups: 3, notes: "Late shift at pub until 1 AM" },
+        { date: "Day -4", sleep_hours: 6.5, stress_level: 3, meals_eaten: 2, water_glasses: 3, activity_minutes: 20, screen_time_hours: 8.5, caffeine_cups: 2, notes: "Ordered midnight pizza" },
+        { date: "Day -3", sleep_hours: 5.0, stress_level: 4, meals_eaten: 2, water_glasses: 2, activity_minutes: 10, screen_time_hours: 9.5, caffeine_cups: 4, notes: "Gaming with roommates till 3:30 AM" },
+        { date: "Day -2", sleep_hours: 6.0, stress_level: 3, meals_eaten: 2, water_glasses: 4, activity_minutes: 30, screen_time_hours: 7.5, caffeine_cups: 3, notes: "Job applications stressing me a bit" },
+        { date: "Day -1", sleep_hours: 5.2, stress_level: 4, meals_eaten: 1, water_glasses: 2, activity_minutes: 10, screen_time_hours: 8.0, caffeine_cups: 4, notes: "Missed dinner, drank energy drink" }
       ],
       todayInitial: {
         sleep_hours: 5.0,
@@ -403,6 +442,8 @@ export function getPresetStudent(type) {
         meals_eaten: 1,
         water_glasses: 2,
         activity_minutes: 15,
+        screen_time_hours: 8.5,
+        caffeine_cups: 4,
         notes: "Slept at 2:45 AM, woke up dizzy, need to lock in"
       }
     };
@@ -419,12 +460,12 @@ export function getPresetStudent(type) {
         bio: "Finding balance across coursework, health, and campus life."
       },
       history: [
-        { date: "Day -6", sleep_hours: 7.0, stress_level: 2, meals_eaten: 3, water_glasses: 6, activity_minutes: 30, notes: "" },
-        { date: "Day -5", sleep_hours: 6.5, stress_level: 3, meals_eaten: 3, water_glasses: 5, activity_minutes: 25, notes: "" },
-        { date: "Day -4", sleep_hours: 7.5, stress_level: 2, meals_eaten: 3, water_glasses: 7, activity_minutes: 45, notes: "" },
-        { date: "Day -3", sleep_hours: 8.0, stress_level: 1, meals_eaten: 3, water_glasses: 6, activity_minutes: 35, notes: "" },
-        { date: "Day -2", sleep_hours: 6.0, stress_level: 3, meals_eaten: 2, water_glasses: 4, activity_minutes: 20, notes: "" },
-        { date: "Day -1", sleep_hours: 6.8, stress_level: 3, meals_eaten: 3, water_glasses: 5, activity_minutes: 30, notes: "" }
+        { date: "Day -6", sleep_hours: 7.0, stress_level: 2, meals_eaten: 3, water_glasses: 6, activity_minutes: 30, screen_time_hours: 5.5, caffeine_cups: 1, notes: "" },
+        { date: "Day -5", sleep_hours: 6.5, stress_level: 3, meals_eaten: 3, water_glasses: 5, activity_minutes: 25, screen_time_hours: 6.0, caffeine_cups: 2, notes: "" },
+        { date: "Day -4", sleep_hours: 7.5, stress_level: 2, meals_eaten: 3, water_glasses: 7, activity_minutes: 45, screen_time_hours: 4.5, caffeine_cups: 1, notes: "" },
+        { date: "Day -3", sleep_hours: 8.0, stress_level: 1, meals_eaten: 3, water_glasses: 6, activity_minutes: 35, screen_time_hours: 5.0, caffeine_cups: 1, notes: "" },
+        { date: "Day -2", sleep_hours: 6.0, stress_level: 3, meals_eaten: 2, water_glasses: 4, activity_minutes: 20, screen_time_hours: 7.0, caffeine_cups: 3, notes: "" },
+        { date: "Day -1", sleep_hours: 6.8, stress_level: 3, meals_eaten: 3, water_glasses: 5, activity_minutes: 30, screen_time_hours: 6.0, caffeine_cups: 2, notes: "" }
       ],
       todayInitial: {
         sleep_hours: 7.0,
@@ -432,6 +473,8 @@ export function getPresetStudent(type) {
         meals_eaten: 3,
         water_glasses: 5,
         activity_minutes: 30,
+        screen_time_hours: 5.5,
+        caffeine_cups: 2,
         notes: ""
       }
     };

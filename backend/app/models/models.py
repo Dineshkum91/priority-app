@@ -32,6 +32,8 @@ class HealthDimension(str, enum.Enum):
     STRESS = "stress"
     NUTRITION = "nutrition"
     RECOVERY = "recovery"
+    SCREEN_TIME = "screen_time"
+    CAFFEINE = "caffeine"
 
 
 class FeedbackResponse(str, enum.Enum):
@@ -70,6 +72,14 @@ class UserProfile(Base):
     typical_sleep_hours = Column(Float, nullable=True)
     activity_level = Column(String(50), nullable=True)  # sedentary, light, moderate, active
     schedule_type = Column(String(50), nullable=True)  # regular, irregular, night_owl
+
+    # Custom daily goals (override default scoring thresholds when set)
+    goal_sleep_hours = Column(Float, nullable=True)
+    goal_water_glasses = Column(Integer, nullable=True)
+    goal_activity_minutes = Column(Integer, nullable=True)
+    goal_max_screen_hours = Column(Float, nullable=True)
+    goal_max_caffeine_cups = Column(Integer, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -110,6 +120,12 @@ class DailyHealthData(Base):
     energy_level = Column(Integer, nullable=True)  # 1-5
     mood = Column(Integer, nullable=True)  # 1-5
 
+    # Screen time
+    screen_time_hours = Column(Float, nullable=True)  # hours of recreational+study screen use
+
+    # Caffeine
+    caffeine_cups = Column(Integer, nullable=True)  # cups/cans of caffeinated drinks
+
     # Free text (optional) — scanned by safety layer
     notes = Column(Text, nullable=True)
 
@@ -126,6 +142,8 @@ class DailyHealthData(Base):
         CheckConstraint("energy_level >= 1 AND energy_level <= 5", name="check_energy_range"),
         CheckConstraint("mood >= 1 AND mood <= 5", name="check_mood_range"),
         CheckConstraint("meal_quality >= 1 AND meal_quality <= 5", name="check_meal_quality_range"),
+        CheckConstraint("screen_time_hours >= 0 AND screen_time_hours <= 24", name="check_screen_time_range"),
+        CheckConstraint("caffeine_cups >= 0 AND caffeine_cups <= 20", name="check_caffeine_range"),
     )
 
 
@@ -226,6 +244,8 @@ class HealthInsight(Base):
     avg_meals_eaten = Column(Float, nullable=True)
     avg_energy_level = Column(Float, nullable=True)
     avg_mood = Column(Float, nullable=True)
+    avg_screen_time_hours = Column(Float, nullable=True)
+    avg_caffeine_cups = Column(Float, nullable=True)
 
     # Pattern observations (only if data supports them)
     patterns = Column(Text, nullable=True)  # JSON list of observed pattern strings

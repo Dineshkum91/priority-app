@@ -13,6 +13,8 @@ class _CheckInScreenState extends State<CheckInScreen> {
   int _stressLevel = 3;
   int _mealsEaten = 3;
   int _waterGlasses = 4;
+  double _screenTimeHours = 6.0;
+  int _caffeineCups = 2;
   bool _isLoading = false;
 
   Future<void> _submit() async {
@@ -23,6 +25,8 @@ class _CheckInScreenState extends State<CheckInScreen> {
       'stress_level': _stressLevel,
       'meals_eaten': _mealsEaten,
       'water_glasses': _waterGlasses,
+      'screen_time_hours': _screenTimeHours,
+      'caffeine_cups': _caffeineCups,
     };
     await apiService.submitCheckIn(data);
     setState(() => _isLoading = false);
@@ -76,6 +80,26 @@ class _CheckInScreenState extends State<CheckInScreen> {
               divisions: 10,
               label: _waterGlasses.toString(),
               onChanged: (val) => setState(() => _waterGlasses = val.toInt()),
+            ),
+            const SizedBox(height: 24),
+            const Text('Screen time today (hours)?', style: TextStyle(fontSize: 16)),
+            Slider(
+              value: _screenTimeHours,
+              min: 0,
+              max: 16,
+              divisions: 32,
+              label: '${_screenTimeHours.toStringAsFixed(1)} hrs',
+              onChanged: (val) => setState(() => _screenTimeHours = val),
+            ),
+            const SizedBox(height: 24),
+            const Text('Caffeinated drinks today?', style: TextStyle(fontSize: 16)),
+            Slider(
+              value: _caffeineCups.toDouble(),
+              min: 0,
+              max: 8,
+              divisions: 8,
+              label: _caffeineCups.toString(),
+              onChanged: (val) => setState(() => _caffeineCups = val.toInt()),
             ),
             const SizedBox(height: 48),
             ElevatedButton(

@@ -3,8 +3,14 @@ import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Read the API base URL from a Dart define, falling back to the Android emulator alias.
+const String _envBaseUrl = String.fromEnvironment(
+  'PRIORITY_API_URL',
+  defaultValue: 'http://10.0.2.2:8000/api/v1',
+);
+
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:8000/api/v1'; // Default for emulator
+  static const String baseUrl = _envBaseUrl;
   
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -90,6 +96,64 @@ class ApiService {
       print('Network error: $e');
     }
     return {'has_sufficient_data': false, 'message': 'Network error'};
+  }
+
+  /// GET /stats/streaks — check-in and goal streaks.
+  Future<StreakData?> getStreaks() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrl/stats/streaks'), headers: headers);
+      if (response.statusCode == 200) {
+        return StreakData.fromJson(jsonDecode(response.body));
+      }
+    } catch (e) {
+      print('Network error: $e');
+    }
+    return null;
+  }
+
+  /// GET /insights/trends — week-over-week trend arrows.
+  Future<TrendsData?> getTrends() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrl/insights/trends'), headers: headers);
+      if (response.statusCode == 200) {
+        return TrendsData.fromJson(jsonDecode(response.body));
+      }
+    } catch (e) {
+      print('Network error: $e');
+    }
+    return null;
+  }
+
+  /// PUT /goals — save custom daily goals.
+  Future<bool> saveGoals(DailyGoals goals) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.put(
+        Uri.parse('$baseUrl/goals'),
+        headers: headers,
+        body: jsonEncode(goals.toJson()),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Network error: $e');
+      return false;
+    }
+  }
+
+  /// GET /export/checkins.csv — returns raw CSV text of all check-ins.
+  Future<String?> exportCheckinsCsv() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrl/export/checkins.csv'), headers: headers);
+      if (response.statusCode == 200) {
+        return response.body;
+      }
+    } catch (e) {
+      print('Network error: $e');
+    }
+    return null;
   }
 }
 

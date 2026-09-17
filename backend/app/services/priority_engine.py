@@ -44,6 +44,17 @@ ACTION_TEMPLATES: Dict[HealthDimensionEnum, List[str]] = {
         "If you're feeling drained, it's okay to say no to one non-essential commitment today.",
         "Try going to bed 30 minutes earlier tonight to help your body recover.",
     ],
+    HealthDimensionEnum.SCREEN_TIME: [
+        "Set your phone to grayscale mode for the rest of the day — it makes scrolling far less compelling.",
+        "Pick one app that eats the most time and log out of it until tomorrow morning.",
+        "Charge your phone outside the bedroom tonight and read a few pages of a book instead.",
+        "Do one activity tonight (walk, shower, chores) with your phone in another room.",
+    ],
+    HealthDimensionEnum.CAFFEINE: [
+        "Make your next drink water or decaf — keep total caffeine today within your limit.",
+        "No caffeine after 2 PM today so it doesn't interfere with tonight's sleep.",
+        "Swap one coffee for a 10-minute walk — the alertness boost lasts longer.",
+    ],
 }
 
 
@@ -119,6 +130,28 @@ def _compute_urgency(score: DimensionScore) -> float:
             return 4.0
         if baseline and current < baseline * 0.7:
             return 3.0
+        return 1.0
+
+    elif dimension == HealthDimensionEnum.SCREEN_TIME:
+        # Higher = worse (inverted dimension)
+        if current > 12.0:
+            return 6.0
+        if current > 9.0:
+            return 4.5
+        if baseline and current > baseline * 1.4:
+            return 3.5
+        if baseline and current > baseline * 1.2:
+            return 2.0
+        return 1.0
+
+    elif dimension == HealthDimensionEnum.CAFFEINE:
+        # Higher = worse (inverted dimension)
+        if current >= 6:
+            return 5.0
+        if current >= 4:
+            return 3.5
+        if baseline and current > baseline * 1.5:
+            return 2.5
         return 1.0
 
     return 1.0

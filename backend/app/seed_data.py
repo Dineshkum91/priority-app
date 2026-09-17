@@ -52,6 +52,11 @@ def seed():
             typical_sleep_hours=7.0,
             activity_level="light",
             schedule_type="irregular",
+            goal_sleep_hours=7.0,
+            goal_water_glasses=6,
+            goal_activity_minutes=20,
+            goal_max_screen_hours=7.0,
+            goal_max_caffeine_cups=3,
         )
         db.add(profile)
         db.commit()
@@ -230,6 +235,8 @@ def _checkin_to_dict(checkin: DailyHealthData) -> dict:
         "meal_quality": checkin.meal_quality,
         "energy_level": checkin.energy_level,
         "mood": checkin.mood,
+        "screen_time_hours": checkin.screen_time_hours,
+        "caffeine_cups": checkin.caffeine_cups,
         "notes": checkin.notes,
     }
 

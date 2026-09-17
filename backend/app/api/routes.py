@@ -1,13 +1,17 @@
 """
-API Routes — Users, Profiles, Check-ins, Recommendations, Feedback, Insights.
+API Routes — Users, Profiles, Check-ins, Recommendations, Feedback, Insights,
+Streaks, Trends, Goals, CSV export.
 """
 
+import csv
+import io
 import json
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -25,6 +29,8 @@ from app.schemas.schemas import (
     FeedbackCreate, FeedbackResponse,
     WeeklyInsightsResponse, HealthInsightResponse,
     PriorityResult,
+    StreakResponse, TrendsResponse, DimensionTrend,
+    GoalUpdateRequest, GoalUpdateResponse,
 )
 from app.services.safety_layer import check_safety
 from app.services.scoring_engine import compute_baseline, score_dimensions
@@ -176,6 +182,8 @@ async def daily_checkin(
         profile_dict = {
             "typical_sleep_hours": current_user.profile.typical_sleep_hours,
             "activity_level": current_user.profile.activity_level,
+            "goal_max_screen_hours": current_user.profile.goal_max_screen_hours,
+            "goal_max_caffeine_cups": current_user.profile.goal_max_caffeine_cups,
         }
 
     baseline = compute_baseline(recent_dicts)
@@ -426,5 +434,250 @@ def _checkin_to_dict(checkin: DailyHealthData) -> dict:
         "meal_quality": checkin.meal_quality,
         "energy_level": checkin.energy_level,
         "mood": checkin.mood,
+        "screen_time_hours": checkin.screen_time_hours,
+        "caffeine_cups": checkin.caffeine_cups,
         "notes": checkin.notes,
     }
+
+
+# ==================== Streaks ====================
+
+def _meets_goals(checkin: DailyHealthData, profile: Optional[UserProfile]) -> bool:
+    """Check a single check-in against the user's custom goals. False if no goals set."""
+    if profile is None:
+        return False
+    checks = []
+    if profile.goal_sleep_hours is not None and checkin.sleep_hours is not None:
+        checks.append(checkin.sleep_hours >= profile.goal_sleep_hours)
+    if profile.goal_water_glasses is not None and checkin.water_glasses is not None:
+        checks.append(checkin.water_glasses >= profile.goal_water_glasses)
+    if profile.goal_activity_minutes is not None and checkin.activity_minutes is not None:
+        checks.append(checkin.activity_minutes >= profile.goal_activity_minutes)
+    if profile.goal_max_screen_hours is not None and checkin.screen_time_hours is not None:
+        checks.append(checkin.screen_time_hours <= profile.goal_max_screen_hours)
+    if profile.goal_max_caffeine_cups is not None and checkin.caffeine_cups is not None:
+        checks.append(checkin.caffeine_cups <= profile.goal_max_caffeine_cups)
+    # All applicable goal checks must pass; at least one must apply
+    return bool(checks) and all(checks)
+
+
+@router.get("/stats/streaks", response_model=StreakResponse)
+def get_streaks(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Consecutive check-in days and consecutive goal-meeting days."""
+    checkins = (
+        db.query(DailyHealthData)
+        .filter(DailyHealthData.user_id == current_user.id)
+        .order_by(DailyHealthData.check_in_date.desc())
+        .limit(365)
+        .all()  # newest first
+    )
+    if not checkins:
+        return StreakResponse(
+            current_checkin_streak=0,
+            longest_checkin_streak=0,
+            goals_met_streak=0,
+            message="No check-ins yet — today is day one!",
+        )
+
+    # Current streak: walk consecutive dates starting from the most recent.
+    # Anchor can be today or yesterday (so the streak isn't 'lost' before
+    # today's check-in).
+    dates = [c.check_in_date for c in checkins]
+    today = date.today()
+    current_streak = 0
+    if dates[0] in (today, today - timedelta(days=1)):
+        current_streak = 1
+        anchor = dates[0]
+        for d in dates[1:]:
+            if d == anchor - timedelta(days=1):
+                current_streak += 1
+                anchor = d
+            else:
+                break
+
+    # Longest streak in the loaded window
+    longest = 1
+    run = 1
+    for i in range(1, len(dates)):
+        if dates[i] == dates[i - 1] - timedelta(days=1):
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 1
+
+    # Goals-met streak (consecutive most-recent days meeting all custom goals)
+    goals_met_streak = 0
+    for c in checkins:
+        if _meets_goals(c, current_user.profile):
+            goals_met_streak += 1
+        else:
+            break
+
+    if current_streak >= 7:
+        message = f"Amazing — {current_streak} days in a row! Keep it up."
+    elif current_streak >= 3:
+        message = f"Nice — {current_streak} day streak going."
+    else:
+        message = "Check in daily to build your streak."
+
+    return StreakResponse(
+        current_checkin_streak=current_streak,
+        longest_checkin_streak=longest,
+        goals_met_streak=goals_met_streak,
+        message=message,
+    )
+
+
+# ==================== Trends ====================
+
+@router.get("/insights/trends", response_model=TrendsResponse)
+def get_trends(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-dimension direction (improving/declining/stable) comparing this week vs last week."""
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    last_week_start = week_start - timedelta(days=7)
+    last_week_end = week_start - timedelta(days=1)
+
+    this_week = (
+        db.query(DailyHealthData)
+        .filter(
+            DailyHealthData.user_id == current_user.id,
+            DailyHealthData.check_in_date >= week_start,
+            DailyHealthData.check_in_date <= week_end,
+        )
+        .all()
+    )
+    last_week = (
+        db.query(DailyHealthData)
+        .filter(
+            DailyHealthData.user_id == current_user.id,
+            DailyHealthData.check_in_date >= last_week_start,
+            DailyHealthData.check_in_date <= last_week_end,
+        )
+        .all()
+    )
+
+    # (dimension, check-in field, lower_is_better)
+    DIMENSIONS = [
+        ("sleep", "sleep_hours", True),
+        ("stress", "stress_level", True),
+        ("screen_time", "screen_time_hours", True),
+        ("caffeine", "caffeine_cups", True),
+        ("activity", "activity_minutes", False),
+        ("hydration", "water_glasses", False),
+        ("nutrition", "meals_eaten", False),
+        ("recovery", "mood", False),
+    ]
+
+    def _avg(items, field):
+        vals = [getattr(c, field) for c in items if getattr(c, field) is not None]
+        return round(sum(vals) / len(vals), 2) if vals else None
+
+    trends = []
+    for dim_name, field, lower_is_better in DIMENSIONS:
+        cur = _avg(this_week, field)
+        prev = _avg(last_week, field)
+        if cur is None or prev is None:
+            direction = "no_data"
+        else:
+            changed = cur - prev
+            tolerance = abs(prev) * 0.1 if prev else 0.1
+            if abs(changed) <= tolerance:
+                direction = "stable"
+            elif lower_is_better:
+                direction = "improving" if changed < 0 else "declining"
+            else:
+                direction = "improving" if changed > 0 else "declining"
+        trends.append(DimensionTrend(
+            dimension=HealthDimensionEnum(dim_name),
+            this_week_avg=cur,
+            last_week_avg=prev,
+            direction=direction,
+        ))
+
+    return TrendsResponse(week_start=week_start, week_end=week_end, trends=trends)
+
+
+# ==================== Custom Goals ====================
+
+@router.put("/goals", response_model=GoalUpdateResponse)
+def update_goals(
+    goals: GoalUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set or update personal daily goals. Goals override default thresholds in scoring."""
+    profile = current_user.profile
+    if profile is None:
+        profile = UserProfile(user_id=current_user.id)
+        db.add(profile)
+
+    for key, val in goals.model_dump(exclude_none=True).items():
+        setattr(profile, key, val)
+
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+@router.get("/goals", response_model=GoalUpdateResponse)
+def get_goals(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the user's current custom goals (defaults to nulls)."""
+    if current_user.profile is None:
+        return GoalUpdateResponse(
+            id=UUID(int=0), user_id=current_user.id,
+            goal_sleep_hours=None, goal_water_glasses=None,
+            goal_activity_minutes=None, goal_max_screen_hours=None,
+            goal_max_caffeine_cups=None,
+        )
+    return current_user.profile
+
+
+# ==================== CSV Export ====================
+
+@router.get("/export/checkins.csv")
+def export_checkins_csv(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export all check-ins as CSV for the authenticated user."""
+    checkins = (
+        db.query(DailyHealthData)
+        .filter(DailyHealthData.user_id == current_user.id)
+        .order_by(DailyHealthData.check_in_date.asc())
+        .all()
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "date", "sleep_hours", "sleep_quality", "activity_minutes",
+        "steps_estimate", "water_glasses", "stress_level", "meals_eaten",
+        "meal_quality", "energy_level", "mood", "screen_time_hours",
+        "caffeine_cups", "notes",
+    ])
+    for c in checkins:
+        writer.writerow([
+            c.check_in_date.isoformat(), c.sleep_hours, c.sleep_quality,
+            c.activity_minutes, c.steps_estimate, c.water_glasses,
+            c.stress_level, c.meals_eaten, c.meal_quality, c.energy_level,
+            c.mood, c.screen_time_hours, c.caffeine_cups, c.notes,
+        ])
+
+    buf.seek(0)
+    filename = f"priority_checkins_{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

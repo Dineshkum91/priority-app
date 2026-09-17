@@ -4,7 +4,8 @@ Scoring Engine — transparent, rule-based health dimension scoring.
 Compares current check-in values against the user's personal rolling baseline.
 Produces per-dimension deviation descriptions, NOT arbitrary 0-100 scores.
 
-Dimensions: sleep, activity, hydration, stress, nutrition, recovery.
+Dimensions: sleep, activity, hydration, stress, nutrition, recovery,
+screen_time, caffeine.
 """
 
 from typing import Optional, List, Dict
@@ -24,6 +25,8 @@ class BaselineData:
     avg_meal_quality: Optional[float] = None
     avg_energy_level: Optional[float] = None
     avg_mood: Optional[float] = None
+    avg_screen_time_hours: Optional[float] = None
+    avg_caffeine_cups: Optional[float] = None
     days_of_data: int = 0
 
 
@@ -39,6 +42,8 @@ RECOMMENDED_WATER_GLASSES = 8
 HIGH_STRESS_THRESHOLD = 4  # on 1-5 scale
 MINIMUM_MEALS = 2
 RECOMMENDED_MEALS = 3
+RECOMMENDED_MAX_SCREEN_HOURS = 6.0  # recreational+study screen use per day
+LATE_CAFFEINE_LIMIT_CUPS = 3  # cups/day before sleep quality tends to suffer
 
 
 def compute_baseline(recent_checkins: List[dict], days: int = 7) -> BaselineData:
@@ -71,6 +76,8 @@ def compute_baseline(recent_checkins: List[dict], days: int = 7) -> BaselineData
         avg_meal_quality=_avg("meal_quality"),
         avg_energy_level=_avg("energy_level"),
         avg_mood=_avg("mood"),
+        avg_screen_time_hours=_avg("screen_time_hours"),
+        avg_caffeine_cups=_avg("caffeine_cups"),
         days_of_data=n,
     )
 
@@ -256,6 +263,72 @@ def score_dimensions(
         dimension=HealthDimensionEnum.RECOVERY,
         current_value=recovery_current,
         baseline_value=recovery_baseline,
+        deviation_description=desc,
+    ))
+
+    # --- Screen Time ---
+    screen_hours = current.get("screen_time_hours")
+    baseline_screen = baseline.avg_screen_time_hours or float(RECOMMENDED_MAX_SCREEN_HOURS)
+    goal_max_screen = (profile or {}).get("goal_max_screen_hours")
+
+    if screen_hours is not None:
+        effective_limit = goal_max_screen if goal_max_screen is not None else RECOMMENDED_MAX_SCREEN_HOURS
+        if screen_hours > effective_limit * 1.5:
+            desc = (
+                f"You reported {screen_hours:.1f} hours of screen time, well above "
+                f"your {effective_limit:.1f}-hour limit"
+                + (" (your custom goal)" if goal_max_screen is not None else "") + "."
+            )
+        elif screen_hours > effective_limit:
+            desc = (
+                f"You reported {screen_hours:.1f} hours of screen time, above "
+                f"your {effective_limit:.1f}-hour limit"
+                + (" (your custom goal)" if goal_max_screen is not None else "") + "."
+            )
+        elif screen_hours >= baseline_screen:
+            desc = f"Your screen time ({screen_hours:.1f} hours) is at or below your recent average."
+        else:
+            desc = f"Your screen time ({screen_hours:.1f} hours) is slightly above your recent average of {baseline_screen:.1f} hours."
+    else:
+        desc = "No screen time data reported today."
+
+    scores.append(DimensionScore(
+        dimension=HealthDimensionEnum.SCREEN_TIME,
+        current_value=screen_hours,
+        baseline_value=baseline_screen,
+        deviation_description=desc,
+    ))
+
+    # --- Caffeine ---
+    caffeine = current.get("caffeine_cups")
+    baseline_caffeine = baseline.avg_caffeine_cups or float(LATE_CAFFEINE_LIMIT_CUPS)
+    goal_max_caffeine = (profile or {}).get("goal_max_caffeine_cups")
+
+    if caffeine is not None:
+        effective_limit = goal_max_caffeine if goal_max_caffeine is not None else LATE_CAFFEINE_LIMIT_CUPS
+        if caffeine > effective_limit * 2:
+            desc = (
+                f"You reported {caffeine} caffeinated drinks — that's double your "
+                f"{effective_limit}-cup limit"
+                + (" (your custom goal)" if goal_max_caffeine is not None else "") + "."
+            )
+        elif caffeine > effective_limit:
+            desc = (
+                f"You reported {caffeine} caffeinated drinks, above your "
+                f"{effective_limit}-cup limit"
+                + (" (your custom goal)" if goal_max_caffeine is not None else "") + "."
+            )
+        elif caffeine >= baseline_caffeine:
+            desc = f"Your caffeine intake ({caffeine}) is at or below your recent average."
+        else:
+            desc = f"Your caffeine intake ({caffeine}) is slightly above your recent average of {baseline_caffeine:.1f}."
+    else:
+        desc = "No caffeine data reported today."
+
+    scores.append(DimensionScore(
+        dimension=HealthDimensionEnum.CAFFEINE,
+        current_value=float(caffeine) if caffeine is not None else None,
+        baseline_value=baseline_caffeine,
         deviation_description=desc,
     ))
 

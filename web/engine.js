@@ -131,7 +131,7 @@ export function checkSafety(currentCheckin, recentCheckins = []) {
 
   // 4. Consecutive Maximum Stress
   const stress = currentCheckin.stress_level;
-  if (stress >= 5) {
+  if (stress != null && stress >= 5) {
     let streak = 1;
     for (const past of recentCheckins) {
       if (past.stress_level >= 5) {
@@ -150,7 +150,7 @@ export function checkSafety(currentCheckin, recentCheckins = []) {
 
   // 5. Zero meals consecutive
   const meals = currentCheckin.meals_eaten;
-  if (meals === 0) {
+  if (meals != null && meals === 0) {
     let streak = 1;
     for (const past of recentCheckins) {
       if (past.meals_eaten === 0) {
@@ -269,7 +269,7 @@ export function determinePriority(currentCheckin, profile, recentCheckins = [], 
     [HealthDimension.HYDRATION]: currentCheckin.water_glasses,
     [HealthDimension.NUTRITION]: currentCheckin.meals_eaten,
     [HealthDimension.ACTIVITY]: currentCheckin.activity_minutes ?? (currentCheckin.stress_level >= 4 ? 10 : 30),
-    [HealthDimension.RECOVERY]: Math.max(1, 6 - (currentCheckin.stress_level || 3))
+    [HealthDimension.RECOVERY]: ((currentCheckin.energy_level || 3) + (currentCheckin.mood || 3)) / 2.0
   };
 
   // Compute urgency for each dimension

@@ -17,9 +17,9 @@ class PriorityApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6B9080), 
-          background: const Color(0xFFF6F8F7), // Calm, minimal background
+          seedColor: const Color(0xFF6B9080),
         ),
+        scaffoldBackgroundColor: const Color(0xFFF6F8F7), // Calm, minimal background
         textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
         useMaterial3: true,
       ),

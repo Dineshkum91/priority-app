@@ -133,8 +133,6 @@ def seed():
             recent_dicts.reverse()  # newest first
 
             current_dict = data.copy()
-            del current_dict["notes"]
-            current_dict["notes"] = data.get("notes")
 
             # Safety check
             safety = check_safety(current_dict, recent_dicts)
@@ -150,6 +148,8 @@ def seed():
                     safety_message=safety.support_message,
                 )
                 db.add(rec)
+                db.commit()
+                db.refresh(rec)
                 all_priorities.append(HealthDimension.RECOVERY.value)
             else:
                 baseline = compute_baseline(recent_dicts)

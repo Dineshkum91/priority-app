@@ -16,6 +16,19 @@ from app.schemas.schemas import PriorityResult
 
 logger = logging.getLogger(__name__)
 
+# Reuse a single client across requests
+_openai_client: Optional[AsyncOpenAI] = None
+
+
+def _get_client() -> Optional[AsyncOpenAI]:
+    global _openai_client
+    settings = get_settings()
+    if not settings.openai_api_key or settings.openai_api_key == "your-openai-api-key":
+        return None
+    if _openai_client is None:
+        _openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+    return _openai_client
+
 SYSTEM_PROMPT = """You are Priority's explanation assistant. Your ONLY job is to rewrite 
 a structured health recommendation into friendly, natural language for a college student (18-25).
 
@@ -47,8 +60,9 @@ async def generate_explanation(priority_result: PriorityResult) -> Optional[str]
         A natural-language explanation string, or a template fallback.
     """
     settings = get_settings()
+    client = _get_client()
 
-    if not settings.openai_api_key or settings.openai_api_key == "your-openai-api-key":
+    if client is None:
         logger.info("No OpenAI API key configured — using template fallback.")
         return _template_fallback(priority_result)
 
@@ -61,7 +75,6 @@ async def generate_explanation(priority_result: PriorityResult) -> Optional[str]
         user_message += f"{i}. {action}\n"
 
     try:
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=[

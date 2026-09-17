@@ -18,7 +18,6 @@ class _PriorityScreenState extends State<PriorityScreen> {
   Future<void> _markComplete() async {
     setState(() => _completing = true);
     await apiService.markComplete(widget.recommendation.id);
-    await apiService.submitFeedback(widget.recommendation.id, 'yes', 'yes');
     setState(() => _completing = false);
     widget.onRefresh();
   }
